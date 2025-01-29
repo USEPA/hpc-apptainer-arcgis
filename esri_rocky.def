@@ -1,0 +1,85 @@
+BootStrap: docker
+From: rockylinux:8
+
+
+%files
+
+    ArcGISGISServerAdvanced_ArcGISServer.prvc /
+    ArcGIS_Server_Linux_113_190305.tar.gz /
+
+%post
+    ## setup RockyLinux
+    yum -y --nogpg install xorg-x11-server-Xvfb.x86_64 fontconfig freetype gettext less vim hostname wget glibc-langpack-en findutils
+
+    # Creat group and user
+    export USER=[insert user name]
+    export GROUP=[insert group name]
+    export UserID=[insert user id]
+
+    groupadd $GROUP
+    useradd -u $UserID -m $USER -g $GROUP
+
+    ## Install ArcGIS Server
+    printf "$USER soft nproc 26000\n" >> /etc/security/limits.conf
+    printf "$USER hard nproc 26000\n" >> /etc/security/limits.conf
+    printf "$USER hard nofile 66000\n" >> /etc/security/limits.conf
+    printf "$USER soft nofile 66000\n" >> /etc/security/limits.conf
+
+    mkdir -p /arcgis/server
+    mkdir -p /arcinstall
+
+    mv /ArcGIS* /arcinstall
+    tar -xf /arcinstall/ArcGIS_Server_Linux_113_190305.tar.gz -C /arcinstall/
+    chown -R $USER:$GROUP /arcinstall
+    chown -R $USER:$GROUP /arcgis
+    chmod -R 777 /arcinstall
+
+    su -c "/arcinstall/ArcGISServer/Setup -m silent -l yes -a /arcinstall/ArcGISGISServerAdvanced_ArcGISServer.prvc -d /arcgis/server" $USER
+    rm -rf /arcinstall
+
+    chown -R $USER:$GROUP /arcgis
+    chmod -R 755 /arcgis
+
+
+%environment
+	
+    ## from /arcgis/server/framework/etc/arcenv	
+    export ARCGISHOME=/arcgis/server
+    export AGSSERVER="${ARCGISHOME}/"
+    export WINEPATH="$ARCGISHOME/bin/wine"
+    export DOTWINE="$ARCGISHOME/framework/runtime/.wine"
+    export WINEPREFIX="$DOTWINE"
+    export ENGINEJAVA94="$ARCGISHOME/"
+    export CLASSPATH="$ARCGISHOME/framework/lib/arcobjects.jar:${CLASSPATH}"
+    export ARCGIS_JAVA_HOME="${AGSSERVER}/framework/runtime/jre/"
+    export TOMCATBIN=$ARCGISHOME/framework/runtime/tomcat/bin
+    export XVFBPATH=$ARCGISHOME/framework/runtime/xvfb/Xvfb
+    export FONTCONFIG_PATH=$ARCGISHOME/framework/runtime/xvfb/Xvfb/etc/fonts
+    export FONTCONFIG_FILE=$ARCGISHOME/framework/runtime/xvfb/Xvfb/etc/fonts/fonts.conf
+    export WINEDEBUG=-all
+    export LIBGL_DRIVERS_PATH=$XVFBPATH/lib64/dri
+    export LIBGL_ALWAYS_SOFTWARE=true
+    export GALLIUM_DRIVER=llvmpipe
+    export UNIXHOME="$HOME"
+    export JRE_LIB=${ARCGISHOME}/framework/runtime/jre/lib
+
+    export PATH=$XVFBPATH/bin:$WINEPATH/bin:$ARCGIS_JAVA_HOME/bin:$ARCGISHOME/tools:$PATH
+    export LD_LIBRARY_PATH=$XVFBPATH/lib64:$WINEPATH/lib64:$WINEPATH/lib64/wine:$TOMCATBIN:$LD_LIBRARY_PATH
+
+    export CONDA_PREFIX="C:\Program Files\ArcGIS\Server\framework\runtime\ArcGIS\bin\Python\envs\arcgispro-py3"
+    export CONDA_DEFAULT_ENV="$CONDA_PREFIX"
+
+%runscript
+
+
+    if [ -z ${SLURM_JOB_ID+x} ];
+        then screen_num=99
+    else
+        screen_num=${SLURM_JOB_ID}
+    fi
+    xvfb-run -n ${screen_num} wine64 "$CONDA_PREFIX\python.exe" "${@}"
+
+
+%labels
+    Author JB
+
